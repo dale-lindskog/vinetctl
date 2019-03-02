@@ -1,0 +1,123 @@
+#!/usr/bin/env perl
+
+# Copyright (c) 2015 Dale Lindskog <dale.lindskog@gmail.com>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF MIND, USE, DATA OR PROFITS, WHETHER
+# IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING
+# OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+#########################################################################
+# vinetctl: a program to control a virtual internetworks (vinets) created 
+# with QEMU. Given a file describing the virtual internetwork topology, 
+# this program can be used to perform such actions as: starting or 
+# stopping the vinet; checking its status, connecting to a virtual 
+# machine within the vinet; granting and revoking access to other users
+# on the host system; and many other such actions.
+#########################################################################
+
+# pragmas
+##########
+
+use warnings;
+use strict;
+use feature qw(say);
+
+use Getopt::Std;
+#use Hash::Util qw( lock_keys );
+use Hash::Util qw( lock_hash );
+use constant { TRUE => 1, FALSE => 0 };
+
+# need a sigtrap to remove our 'running' file (used to ensure only one
+# instance of this program running per user)
+#######################################################################
+
+use sigtrap 'handler' => \&sigtrap, 'HUP', 'INT','ABRT','QUIT','TERM'; 
+
+# TODO: temporary:
+use lib "./lib";
+
+use Vinetctl::Globals qw( %rc %args %globals );
+
+use Vinetctl::Debug qw( Warn Die );
+
+use Vinetctl::Init qw( get_rc );
+
+use Vinetctl::Util qw( log_cmdline );
+
+use Vinetctl::Main qw( main );
+
+################
+# BEGIN program
+################
+
+# getopts() removes switches from @ARGV, so save cmdline first
+###############################################################
+
+my $cmdline = "$0 @ARGV";
+getopts('DbmstpeIrvhnFwdf:u:i:a:', \%args);     # switches now off @ARGV
+
+# set the run-control variables
+################################
+
+get_rc( \%rc ); 
+#lock_keys( %rc );
+lock_hash( %rc );
+
+# check or create 'running' file; 
+# only one instance of this program per user
+#############################################
+
+$globals{pid_file} = "$ENV{HOME}/$rc{user_dir}/running";
+
+-e "$ENV{HOME}/$rc{user_dir}" 
+    or mkdir( "$ENV{HOME}/$rc{user_dir}" ) 
+        or Die "cannot mkdir $ENV{HOME}/$rc{user_dir}: $!\n";
+
+-e $globals{pid_file} 
+    and Die "$globals{pid_file} exists.  ", 
+            "Are you already running this program?\n";
+
+my $did_pid_file = FALSE;
+open( my $pid_fh, '>', "$globals{pid_file}" )
+    or Die "cannot open $globals{pid_file}: $!\n";
+$did_pid_file = TRUE;
+close $pid_fh;
+
+# log saved cmdline, including switches
+########################################
+
+log_cmdline( $cmdline );
+
+# call Main::main(), to set up topology, 
+# and execute requested action
+#########################################
+
+main( @ARGV );      # @ARGV == ACTION PARAMS
+
+# sigtrap(): delete pidfile if we're killed by a (trappable) signal
+####################################################################
+
+sub sigtrap() {
+    unlink $globals{pid_file}; 
+    exit(1); 
+}
+
+# exit handler: delete pidfile on exit or die()
+################################################
+
+END { 
+    say STDERR "DEBUG: running exit handler" if $args{d};
+
+    if ( $did_pid_file ) {
+        unlink $globals{pid_file} 
+            or Warn "cannot unlink $globals{pid_file}: $!\n";
+    }
+}

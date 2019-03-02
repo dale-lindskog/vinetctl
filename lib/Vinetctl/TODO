@@ -1,0 +1,189 @@
+## TODOs
+## 
+## - already have comma separated list of images; add different 
+## kinds (cd, ide); add different formats (raw)
+## 
+## - should be able to name the saves, so that ppl can give them memorable 
+## names
+## 
+## - check the date and/or size of the log file, and rotate if necessary
+## 
+## - fstat | grep :PORT' works to find open ports, on obsd anyway
+## 
+## - for some dumb reason, I set things so you cannot set a different driver
+## for the nic and drive!
+## 
+## - -net dump can dump to a pcap on the virt host; since this can be done
+## on top of a normal -netdev socket, could have all vms dump to file
+## in a topology, and then could read those to see traffic from host
+## the interesting idea would be to incorporate stuff from wireshark to
+## display network traffic in an interesting way.  Problem: requires
+## the old -net syntax, instead of -netdev; not sure of the 'vlan' tag
+## will match with the newer 'id' tag; must experiment.  Just found
+## this: 
+## 
+## "In addition to @usr57368 answer - For devices created with
+## '-netdev', use '-object filter-dump,...' instead net dump:
+## -object filter-dump,id=id,netdev=dev,file=filename][,maxlen=len]"
+## 
+## 'netdev=e0', 'netdev=e1' etc. is what we want for netdev, 'id=xx'
+## can be anything, I think; I used f1, f2 etc.  Can merge pcap files
+## with mergecap, and remove dups with editcap -d.  Looks like the 
+## qemu monitor can be used to start pcaptures with the 'object'
+## monitor command, which probably corresponds to the -object cmdline
+## option. 
+## 
+## So, with pcaps, have a 'pcap-record' action which enables, either for all
+## or for some vms in the topology; then a 'merge' action (or 'pcap-merge')
+## which runs 'mergecap' and then 'editcap -Dxxxxx'.  I guess this merged
+## pcap would then be the default view for action 'pcap-view' or something;
+## either that or give them names and allow choices.  Probably need a 
+## 'pcap-stop' or something before merging, since if there is a ton of 
+## traffic, then there may be a race.
+## 
+## Actually, try to dump to a pipe or something so that we can read from it
+## real-time 
+## 
+## - Log::Log4perl seems an excellent logging module
+## 
+## - lotsa ppl not gonna wanna build their own bridges; make it so vde
+## switches can act as bridges (connected to a tap or other switches) 
+## to cover this common use case; call this vde-.  Even more commonly,
+## they'll want the vde_switch connected to the tap, so that one tap
+## interface can connect to multiple vms; actually, just redo the
+## 'tap' netdev so that it always invokes a vde_switch; vm connects
+## to vde_switch, vde_switch to tap; allow multiple (max 24?) vms
+## to connect to same tap device.  Way to do this tap thing is to have
+## vinetctl check for the existence of a particular vde_switch socket;
+## if it exists, then a vde_switch connected to that tap device already
+## exists: dont' create, but just invoke qemu to connect to it; if it
+## doesn't exist, create it; need to somehow ensure not too many vms
+## try to connect to this vde_switch. 
+## 
+## This works for vde-: 
+## 
+## vde_switch -sock ./vde2tap.ctl -daemon -tap tap2
+## 
+## qemu-system-x86_64 -name vde2tap -enable-kvm \
+## -cdrom ~/.vinet/base_images/Core-current.iso -curses \
+## -device virtio-net,mac=x:x,netdev=e0 \
+## -netdev vde,id=e0,sock=./vde2tap.ctl
+## 
+## Best way to do this is to have a 'vde2tap' netdev in topology file,
+## perhaps simply of the form 'vde2tap' which defaults to an appropriately
+## named vde_switch (in ~/.vinet?), which connects to an appropriately
+## named tap (tap${UID}?).  If tap${UID}, then set ipaddr to 
+## 192.168.x.1 where x == $UID - 1000, so when uid==1000, 
+## ipaddr==192.168.0.1. 
+## 
+## - Got udp to other users working (actually only tested to other
+## networks of same user, but absolutely should work to other users,
+## since it's just a matter of specifying IP,PORT at tend of netdev
+## line, e.g. 127.0.0.11,1025.  But it might be messy in there, cuz
+## it sort just worked by luck for me.  UDP code is complex.
+## 
+## - Can conditionally load modules with a special 'if' directive; see:
+## 
+## http://search.cpan.org/~rjbs/if-0.0606/if.pm
+## 
+## so if I organize functions into modules associated with actions, can
+## conditionally load that module depending on what action is called.
+## 
+## - Note: can migrate all running topologies now, but still have to
+## save first: 
+## 
+## local: for i in $(./vinetctl run); do ./vinetctl -mf $i save; done
+## 
+## local: ./vinetctl migrate
+## 
+## remote: for i in LIST; do ./vinetctl -mf $i restore; done
+## 
+## - chk and report on stderr on vde_switch and wirefilter, just as I do with 
+## qemu
+## 
+## - allow default netdev to be specified in %rc (probably change default 
+## to vde)
+## 
+## - find all uses of unix '/' as path separator, and replace with I think it's
+## File::Spec functions
+## 
+## - SelfLoader std perl module can load subs on demand, which may speed up
+## this program since a lot of functions are never called for a particular
+## invocation: have to run with -d to see what gets called when, and make
+## some decisions about what to always load, and what to selfload.
+## 
+## - status action should have some kind of 'stop pending' message after 
+## running stop action
+## 
+## - should be able to grant access to the monitors (vm, vde, wirefilter)
+## 
+## - all XxxAction.pm modules should only export the XxxAction sub; move all
+## other exported modules to another file; this so that each XxxAction.pm
+## exports only one sub, and rest are private
+## 
+## - set an rc timeout variable, and then use alarm() to timeout dialog loop
+## if there is inactivity -- this so that the thing doesn't run forever
+## in an abandoned terminal.  (cannot mix sleep() with alarm())
+## 
+## - would be nice to have a tmux window showing diagram, especially and
+## perhaps only when using dialog -- so that it can be consulted easily
+## 
+## - figure out how to host our own ascinema web server, put tutorials there
+## 
+## - figure out how to put the thing on CPAN, in App:: category
+## 
+## - figure out how to make a slackbuild, and what dependencies are needed,
+## and if not all exist in slack base or slackbuilds, then make slackbuilds
+## for them too.
+## 
+## - every user (e.g. $UID > 999) should get a tap device on startup: 
+##   'tunctl -u $UID -t tap${UID}' or something.
+## 
+## - make dialog optional like the disabled actions (only there is no action!)
+## so ppl don't need to have dialog to run the prog (and generally disable
+## actions over strict prereqs).
+## 
+## - should spit out all missing dependencies at once (including optional
+## dependencies with -w or something?) so that user doesn't end up in a
+## dependency loop.
+## 
+## - conf action produces x=y lines, which when put into /etc/vinet/vinetrc,
+## will be read by vinetctl for configuration; but all the arefs are so far
+## fixed, non-configurable values; e.g., supported archs shouldn't be 
+## configurable.  Right now I only allow rc overriding of scalars; this may
+## need to chage in the future if non-scalars become configurable.
+## 
+## - using backup_port rc var for migrate: it should have its own var
+## 
+## - restore from migration (-m) fails when acceleration is not running;
+## noticed this when migrating on a host that I failed to reset /dev/kvm
+## to appropriate permissions.
+## 
+## - with design action, need a delete action to remove a private topology; 
+## have to make sure nothing is running, no disks, and when deleting, 
+## remove all relevant directories, stale sockets etc.
+## 
+## - got -t, but should be able to set perma the 'uncripple' tmux option, 
+## perhaps with the 'set' action (but not topology specific); also should be 
+## able to uncrippled a crippled topology (tmux should probably be able to be
+## reconfigured post-startup).
+## 
+## - perhaps allow starts without the 1 sec timeout; kinda unsafe with NO
+## timeout, but perhaps a shorter one would be okay. 
+## 
+## - 'INSTALL' is a reserved topology name for Dialog guided installations;
+## so it cannot be the name of a topology; let's reserve FULLCAP names 
+## so that we can use them for such special purposes.  Already filtered
+## out FULLCAP names from running action output, but should actually
+## prohibit such files in the topology file dir
+## 
+## - get some kind of error msg with vde++ when wirefilter tries to delete
+## a nonexistent pid file.  Actual causes a die() and the top don't startup,
+## but after a couple tries works.
+## 
+## - INSTALL and STANDALONE need to be integrated into 'running' somehow, so
+## we can manipulate then, esp with vinetmgr.sh
+## 
+## - before migrating, check that the machines are in the post_migrate state,
+## which they go into once the gz statefile has been fully written to disk. 
+## -F to force it I guess
